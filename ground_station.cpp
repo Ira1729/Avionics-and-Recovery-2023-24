@@ -8,7 +8,7 @@
 #define TX 19
 #define RX 18
 
-#define ARRLEN 21
+#define ARRLEN 24
 
 HardwareSerial SerialAT(1);
 CRC8 crc;
@@ -90,8 +90,11 @@ void loop() {
     uint8_t time_hour=byte_arr[18];
     uint8_t time_min=byte_arr[19];
     uint8_t time_sec=byte_arr[20];
+    float bat_volt=(byte_arr[21]/255.0)*12;
+    float ch1_volt=(byte_arr[22]/255.0)*12;
+    float ch2_volt=(byte_arr[23]/255.0)*12;
 
-    Serial.printf("%f,%f,%f,%f,%f,%f,%d,%d,%d,%d,%d,%d,%d,%d,%d\n",temp,alt,pitch,roll,yaw,accz,lat_deg,lat_min,lat_sec,long_deg,long_min,long_sec,time_hour,time_min,time_sec);
+    Serial.printf("%f,%f,%f,%f,%f,%f,%d,%d,%d,%d,%d,%d,%d,%d,%d,%f,%f,%f\n",temp,alt,pitch,roll,yaw,accz,lat_deg,lat_min,lat_sec,long_deg,long_min,long_sec,time_hour,time_min,time_sec,bat_volt,ch1_volt,ch2_volt);
     valid_msg=false;
   }
   else if (valid_msg==true){
@@ -114,6 +117,9 @@ void loop() {
       break;
     case 0x07:
       Serial.println("Landed");
+      break;
+    case 0x10:
+      Serial.println("BME Error Restarting");
       break;
     default:
       Serial.println("Random msg?");
