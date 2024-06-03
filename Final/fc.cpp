@@ -390,20 +390,19 @@ void kalman_gain(int sensor){
     //bme
     kalman_H = {1, 0, 0};
     kalman_H_T = {1, 0, 0};
-    kalman_R = {0.5};
+    kalman_R = {2.062};
   }
   else if (sensor == 2){
     //gps
     kalman_H = {1, 0, 0};
     kalman_H_T = {1, 0, 0};
-    kalman_R = {0.9};
+    kalman_R = {10};
   }
   if (sensor == 3){
     //bno
     kalman_H = {0, 0, 1};
     kalman_H_T = {0, 0, 1};
-    if ((apogee == true) || bme_alt> APPROX_BURNOUT_ALT) kalman_R = {0.9};
-    else kalman_R = {0.6};
+    kalman_R = {0.0029};
   }
 
   BLA::Matrix <1,1> intermediate = kalman_H * kalman_P_inter * kalman_H_T + kalman_R;
