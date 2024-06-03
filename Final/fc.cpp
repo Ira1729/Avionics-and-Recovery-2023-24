@@ -14,6 +14,34 @@
 //Initialisations
 CRC8 crc;
 
+//Flight Stages---------------------------------------
+//The mark variables are to ensure that the data logger core writes them to esp flash
+bool liftoff = false;
+bool liftoff_mark = false;
+bool landed = false;
+bool landed_mark = false;
+bool apogee = false;
+bool apogee_mark = false;
+bool target = false;
+bool target_mark = false;
+bool reef = false;
+bool reef_mark = false;
+float maxalt = 0;
+uint64_t maxalt_time = 0; 
+int apogee_detect_timer = 2;
+
+float landed_window[10];
+int landed_count = 10;
+
+float variance(float arr[], int len){
+  float sumx = 0, sumx2 = 0;
+  for (int i=0; i < len; i++){
+    sumx = sumx + arr[i];
+    sumx2 = sumx2 + (arr[i] * arr[i]);
+  }
+  return ((sumx2/len) - ((sumx/len)*(sumx/len)));
+}
+
 //ESP Misc
 uint64_t fc_time = 0;
 uint64_t now_time = esp_timer_get_time();
@@ -60,12 +88,18 @@ void init_spi_flash(){
     Serial.println("Unable to access SPI Flash chip");
     delay(100);
   }
+  delay(100);
   snprintf(file_name, sizeof(file_name), "flight_%d", flight_count);
-
-  if (SerialFlash.create(file_name, 2000000)) {
-    Serial.println("File Created!");
-  } else {
-    Serial.println("File already exists!");
+  if (liftoff == false){
+    for (int i = 0; i < 3; i++){
+      if (SerialFlash.create(file_name, 2000000)) {
+        Serial.println("File Created!");
+        break;
+      } else {
+        Serial.println("File already exists!");
+        delay(100);
+      }
+    }
   }
 }
 
@@ -79,7 +113,7 @@ void write_to_flash_file(uint8_t arr[],int len){
     file.seek(file_offset);
     file.write(arr, len);
     file.write(&crc_value, 1);
-    file_offset =file_offset + len + 1;
+    file_offset = file_offset + len + 1;
     file.close();
   } 
   else {
@@ -287,33 +321,6 @@ void lora_transmit(uint8_t arr[], uint8_t len){
   SerialLORA.write(crc.calc());
 }
 
-//Flight Stages---------------------------------------
-//The mark variables are to ensure that the data logger core writes them to esp flash
-bool liftoff = false;
-bool liftoff_mark = false;
-bool landed = false;
-bool landed_mark = false;
-bool apogee = false;
-bool apogee_mark = false;
-bool target = false;
-bool target_mark = false;
-bool reef = false;
-bool reef_mark = false;
-float maxalt = 0;
-uint64_t maxalt_time = 0; 
-int apogee_detect_timer = 2;
-
-float landed_window[10];
-int landed_count = 10;
-
-float variance(float arr[], int len){
-  float sumx = 0, sumx2 = 0;
-  for (int i=0; i < len; i++){
-    sumx = sumx + arr[i];
-    sumx2 = sumx2 + (arr[i] * arr[i]);
-  }
-  return ((sumx2/len) - ((sumx/len)*(sumx/len)));
-}
 
 //Channels--------------------------------------------
 #define CH1 27
@@ -484,7 +491,7 @@ void setup() {
   snprintf(key_apogee, sizeof(key_apogee), "apogee%d", flight_count);
   apogee =  fc_pref.getBool(key_apogee, false);
   apogee_mark = apogee;
-  snprintf(key_target, sizeof(target), "target%d", flight_count);
+  snprintf(key_target, sizeof(key_target), "target%d", flight_count);
   target = fc_pref.getBool(key_target, false);
   target_mark = target;
   snprintf(key_reef, sizeof(key_reef), "reef%d", flight_count);
