@@ -91,14 +91,10 @@ void init_spi_flash(){
   delay(100);
   snprintf(file_name, sizeof(file_name), "flight_%d", flight_count);
   if (liftoff == false){
-    for (int i = 0; i < 3; i++){
-      if (SerialFlash.create(file_name, 2000000)) {
-        Serial.println("File Created!");
-        break;
-      } else {
-        Serial.println("File already exists!");
-        delay(100);
-      }
+    if (SerialFlash.create(file_name, 2000000)) {
+      Serial.println("File Created!");
+    } else {
+      Serial.println("File already exists!");
     }
   }
 }
@@ -118,6 +114,8 @@ void write_to_flash_file(uint8_t arr[],int len){
   } 
   else {
     Serial.println("Failed to open file for writing.");
+    //If this happens mostly the file was not created properly,so..
+    SerialFlash.create(file_name, 2000000);
   }
 }
 
@@ -170,7 +168,7 @@ float press_initial = 0;
 void press_win_update(){
   block_core = true;
   float val=bme.readPressure();
-  if (val == -16180.55) ESP.restart();
+  if (val < 0) ESP.restart();
   block_core = false;
   press_avg=press_avg+(val-press_arr[press_index])/PRESS_WIN;
   press_arr[press_index]=val;
@@ -249,17 +247,17 @@ void bno_raw_update(){
   bno055_read_gyro_xyz(&bno_gyro);
   bno055_read_accel_xyz(&bno_accel);
 
-  mag_x = simple_low_pass(float(bno_mag.x)/16, mag_x, 8);
-  mag_y = simple_low_pass(float(bno_mag.y)/16, mag_y, 8);
-  mag_z = simple_low_pass(float(bno_mag.z)/16, mag_z, 8);
+  mag_x = simple_low_pass((float(bno_mag.x)/16 + 30.46875) * 0.9765, mag_x, 8);
+  mag_y = simple_low_pass((float(bno_mag.y)/16 - 1.46875) * 0.95126, mag_y, 8);
+  mag_z = simple_low_pass((float(bno_mag.z)/16 - 44.03125) * 1.2, mag_z, 8);
   
   gyro_x = simple_low_pass(float(bno_gyro.x)/16 - CRCN_GYRO_X, gyro_x, 31);
   gyro_y = simple_low_pass(float(bno_gyro.y)/16 - CRCN_GYRO_Y, gyro_y, 31);
   gyro_z = simple_low_pass(float(bno_gyro.z)/16 - CRCN_GYRO_Z, gyro_z, 31);
 
-  acc_x = simple_low_pass(float(bno_accel.x)/100, acc_x, 8);
-  acc_y = simple_low_pass(float(bno_accel.y)/100, acc_y, 8);
-  acc_z = simple_low_pass(float(bno_accel.z)/100, acc_z, 8);
+  acc_x = simple_low_pass((float(bno_accel.x)/100 - 0.395) * 0.987, acc_x, 8);
+  acc_y = simple_low_pass((float(bno_accel.y)/100 + 0.515) * 0.98, acc_y, 8);
+  acc_z = simple_low_pass((float(bno_accel.z)/100 - 0.785) * 1.1, acc_z, 8);
 }
 
 void init_bno(){
@@ -348,7 +346,7 @@ int8_t land_beep_count = 0;
 
 //Kalman Filter--------------------------------------
 #define APPROX_BURNOUT_ALT 1200
-#define ACC_G 9.81
+#define ACC_G 9.8445944
 
 BLA::Matrix<3,1> kalman_x;
 BLA::Matrix<3,1> kalman_x_inter;
@@ -419,8 +417,10 @@ void kalman_estimate_update(int sensor){
   }
 
   if(sensor == 3){
-    if ((apogee == true) || bme_alt> APPROX_BURNOUT_ALT) kalman_z = {-ACC_G};
-    else kalman_z = {acc_z - ACC_G};
+    float net_accn = acc_x*acc_x + acc_y*acc_y + acc_z*acc_z; //Note that this does not include g
+    if (net_accn < 4) kalman_z = {-ACC_G}; //Free fall
+    else if (apogee == false) kalman_z = {acc_z - ACC_G}; // Should be before burnout
+    else kalman_z = 0; //After parachute ejection
   }
 
   kalman_x = kalman_x_inter + kalman_K * (kalman_z - (kalman_H * kalman_x_inter));
@@ -748,14 +748,14 @@ void loop2(void* pvparameters) {
     while (block_core) delay(100);
 
     //Comment these serial print finally, it is causing some 400ms lag
-    //Serial.printf("BME Pressure %f Temp %f Alt %f\n", press_avg, temp_avg, bme_alt);
-    //Serial.printf("BNO Acc %f %f %f\n", acc_x, acc_y, acc_z);
+    Serial.printf("BME Pressure %f Temp %f Alt %f\n", press_avg, temp_avg, bme_alt);
+    Serial.printf("BNO Acc %f %f %f\n", acc_x, acc_y, acc_z);
     //Serial.printf("BNO Gyro %f %f %f\n", gyro_x, gyro_y, gyro_z);
     //Serial.printf("BNO Mag %f %f %f\n", mag_x, mag_y, mag_z);
     //Serial.printf("BNO Angle %f %f %f\n", ang_x, ang_y, ang_z);
     //Serial.printf("GPS Lat %f Long %f Alt %f\n", Pos_lat, Pos_long, gps_alt);
     //Serial.printf("FC Time %d\n",fc_time);
-    //Serial.printf("Filtered Alt %f\n\n", filtered_alt);
+    Serial.printf("Filtered Alt %f\n\n", filtered_alt);
 
     //Flight Logic
     //The values i think is valid for the final flight is written in comments
